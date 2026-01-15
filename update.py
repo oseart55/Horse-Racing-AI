@@ -1,7 +1,8 @@
 import requests
 import sqlite3
 import time
-
+import re
+from fractions import Fraction
 # -----------------------------
 # CONSTANTS
 # -----------------------------
@@ -13,6 +14,36 @@ HEADERS = {
     "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 16_2 like Mac OS X) "
                   "AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.2 Mobile/15E148 Safari/604.1"
 }
+
+# ----------------------------
+# HELPERS 
+# ----------------------------
+def distance_str_to_units(distance: str) -> float:
+    if not distance or not isinstance(distance, str):
+        return None
+
+    s = distance.upper().strip()
+    furlongs = 0.0
+
+    # --- Miles ---
+    mile_match = re.search(r'([\d\s/]+)\s*M', s)
+    if mile_match:
+        miles = sum(Fraction(p) for p in mile_match.group(1).split())
+        furlongs += float(miles * 8)
+
+    # --- Furlongs ---
+    furlong_match = re.search(r'([\d\s/]+)\s*F', s)
+    if furlong_match:
+        furlongs += float(sum(Fraction(p) for p in furlong_match.group(1).split()))
+
+    # --- Yards ---
+    yard_match = re.search(r'(\d+)\s*Y', s)
+    if yard_match:
+        furlongs += int(yard_match.group(1)) / 220.0
+
+    # 🔥 Return "long form" units (furlongs × 100)
+    return round(furlongs * 100, 2)
+
 
 # -----------------------------
 # GET ALL TRACKS RUNNING RACES TODAY
@@ -67,6 +98,21 @@ def get_json(url):
         return r.json() or {}
     except Exception:
         return {}
+
+def get_surface_label(race_results):
+    # Try raceDetails nested first
+    race_details = race_results.get("raceDetails")
+    if race_details and "surfaceLabel" in race_details and race_details["surfaceLabel"]:
+        return race_details["surfaceLabel"]
+    
+    return race_results.get("surfaceLabel")
+
+def get_track_condition_label(race_results):
+    race_details = race_results.get("raceDetails")
+    if race_details and "trackConditionLabel" in race_details and race_details["trackConditionLabel"]:
+        return race_details["trackConditionLabel"]
+    
+    return race_results.get("surfaceCondition")
 
 # -----------------------------
 # PROCESS TRACK SEQUENTIALLY
@@ -151,9 +197,18 @@ for track in TRACKS:
         race_results_url = f"https://www.twinspires.com/api/raceresults/results/{race_date}/{track}/Thoroughbred/{race_num}"
 
         entries = get_json(entries_url)
+        
         race_results = get_json(race_results_url)
         race_details = race_results.get("raceDetails") or {}
-        distance = race_details.get("distance")
+        distance = None
+        pre_race_details = None
+        if race_details == {}:
+            pre_race_details = requests.get(f"https://www.twinspires.com/adw/todays-tracks/{track}/Thoroughbred/races/{race_num}?affid=2000", headers=HEADERS)
+            if pre_race_details.status_code == 200:
+                pre_race_details= pre_race_details.json()
+                distance = distance_str_to_units(pre_race_details.get("distance"))
+        else:
+            distance = race_details.get("distance")
         if distance is not None:
             distance = distance / 100
         finish_map = {fin.get("brisId"): fin.get("finishPosition")
@@ -169,6 +224,14 @@ for track in TRACKS:
             lt = stats.get("lifetimeStats") or {}
             raw_age = lt.get("age")
             age = race_year - int(h["yob"]) if raw_age is None and h.get("yob") else raw_age
+            
+            if race_results == {}:
+                surfaceLabel = get_surface_label(pre_race_details)
+                trackConditionLabel = get_track_condition_label(pre_race_details)
+            else:
+                surfaceLabel = get_surface_label(race_results)
+                trackConditionLabel = get_track_condition_label(race_results)
+
 
             horses.append({
                 "brisId": brisId,
@@ -176,8 +239,8 @@ for track in TRACKS:
                 "postPosition": h.get("postPosition"),
                 "programNumber": h.get("programNumber"),
                 "distance": distance,
-                "surfaceLabel": race_results.get("raceDetails", {}).get("surfaceLabel"),
-                "trackConditionLabel": race_results.get("raceDetails", {}).get("trackConditionLabel"),
+                "surfaceLabel": surfaceLabel,
+                "trackConditionLabel": trackConditionLabel,
                 "odds": h.get("liveOdds"),
                 "oddsRank": h.get("oddsRank"),
                 "scratched": int(h.get("scratched", False)),
