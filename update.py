@@ -146,7 +146,7 @@ for track in TRACKS:
     race_year = int(race_date.split("-")[0])
     print(f"{track} | {race_date} | {race_count} races")
 
-    for race_num in range(1, race_count+1):
+    for race_num in range(1, race_count):
         entries_url = f"https://www.twinspires.com/adw/todays-tracks/{track}/Thoroughbred/races/{race_num}/entries?affid={AFFID}"
         race_results_url = f"https://www.twinspires.com/api/raceresults/results/{race_date}/{track}/Thoroughbred/{race_num}"
 
@@ -161,6 +161,7 @@ for track in TRACKS:
                       if fin.get("brisId") and fin.get("finishPosition")}
 
         horses = []
+        print(f"{track} Race {race_num}")
         for h in entries:
             print(h.get("name"))
             brisId = h.get("entryId")
@@ -192,7 +193,7 @@ for track in TRACKS:
                 "owner": h.get("ownerName"),
                 "sire": h.get("sireName"),
                 "dam": h.get("damName"),
-                "priorRunningStyle": h.get("priorRunStyle") or "NA",
+                "priorRunningStyle": h.get("priorRunStyle") or None,
                 "speedPoints": h.get("speedPoints"),
                 "averagePaceE1": h.get("averagePaceE1"),
                 "averagePaceE2": h.get("averagePaceE2"),
@@ -263,7 +264,6 @@ for track in TRACKS:
             cur.executemany(UPSERT_SQL, horses)
             conn.commit()
             horses_updated += len(horses)
-            print(f"{track} Race {race_num}: {len(horses)} horses upserted")
 
 conn.close()
 print(f"Total horses updated: {horses_updated}")

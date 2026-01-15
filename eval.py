@@ -1,67 +1,142 @@
-import requests
+import os
+import sqlite3
 import pandas as pd
 import torch
 import torch.nn as nn
+from torch.utils.data import Dataset, DataLoader
+from sklearn.preprocessing import StandardScaler, LabelEncoder
+import matplotlib.pyplot as plt
 import pickle
 from datetime import datetime
 
-# ===============================
+# =========================================================
 # CONFIG
-# ===============================
-DEVICE = "cpu"
-DATA_DIR = "/data"
+# =========================================================
 
-MODEL_PATH = f"{DATA_DIR}/ranking_mlp.pth"
-SCALER_PATH = f"{DATA_DIR}/scaler.pkl"
-ENCODERS_PATH = f"{DATA_DIR}/encoders.pkl"
-FEATURE_COLS_PATH = f"{DATA_DIR}/feature_cols.pkl"
+DB_PATH = "horses.db"
+TABLE_NAME = "horses"
+MIN_HORSES_PER_RACE = 4
+INCLUDE_ODDS = False
 
-HEADERS = {
-    "User-Agent": (
-        "Mozilla/5.0 (iPhone; CPU iPhone OS 16_2 like Mac OS X) "
-        "AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.2 Mobile/15E148 Safari/604.1"
-    )
-}
+EPOCHS = 10
+LR = 1e-3
+HIDDEN_DIM = 128
+TRAIN_FRAC = 0.8
+SEED = 42
 
-# ===============================
-# HELPERS
-# ===============================
+DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
+
+MODEL_PATH = "data/ranking_mlp.pth"
+SCALER_PATH = "data/scaler.pkl"
+ENCODERS_PATH = "data/encoders.pkl"
+FEATURE_COLS_PATH = "data/feature_cols.pkl"
+
+# =========================================================
+# UTILS
+# =========================================================
+
 def parse_fractional_odds(val):
     if pd.isna(val):
-        return 0.0
+        return None
     if isinstance(val, (int, float)):
         return float(val)
     if isinstance(val, str) and "/" in val:
         try:
             num, den = val.split("/")
-            return float(num) / float(den) + 1.0
+            return float(num)/float(den) + 1.0
         except:
-            return 0.0
-    return 0.0
+            return None
+    return None
 
-def to_furlongs(distance_str):
-    if not isinstance(distance_str, str):
-        return 0.0
-    distance_str = distance_str.strip().upper()
-    try:
-        value, unit = distance_str.split()
-        value = float(value)
-        if unit == "Y":
-            return value / 220
-        elif unit == "M":
-            return value * 8
-        elif unit == "F":
-            return value
-        else:
-            return 0.0
-    except:
-        return 0.0
+def load_and_split_races(db_path, table_name, min_horses, include_odds, train_frac, seed, training=True):
+    conn = sqlite3.connect(db_path)
+    df = pd.read_sql(f"SELECT * FROM {table_name}", conn)
+    conn.close()
 
-# ===============================
+    # Basic preprocessing
+    if training:
+        df = df[df["finishPosition"].notna()]
+        df["top3"] = df["finishPosition"].isin([1,2,3]).astype(int)
+    else:
+        # future races: top3 placeholder
+        df["top3"] = 0
+
+    if include_odds:
+        df["odds"] = df["odds"].apply(parse_fractional_odds)
+
+    numeric_features = [
+        "distance","age","weight","speedPoints","averagePaceE1",
+        "averagePaceE2","averagePaceLP","averageSpeedLast3",
+        "bestSpeedAtDistance","daysOff","averageClass","lastClass",
+        "primePower","odds",
+        "horseLtTrackStartCount","horseLtTrackWinCount","horseLtTrackPlacesCount","horseLtTrackShowsCount",
+        "horseLtTrackQHStartCount","horseLtTrackQHWinCount","horseLtTrackQHPlacesCount","horseLtTrackQHShowsCount",
+        "horseLtMudsloppyStartCount","horseLtMudsloppyWinCount","horseLtMudsloppyPlacesCount","horseLtMudsloppyShowsCount"
+    ]
+
+    categorical_features = [
+        "surfaceLabel", "trackConditionLabel","equipment","priorRunningStyle"
+    ]
+
+    # Encode categoricals
+    encoders = {}
+    for col in categorical_features:
+        le = LabelEncoder()
+        df[col] = df[col].fillna("NA")
+        df[col] = le.fit_transform(df[col])
+        encoders[col] = le
+
+    # Fill numeric NaNs and scale
+    for col in numeric_features:
+        df[col] = pd.to_numeric(df[col], errors="coerce")
+        df[col] = df[col].fillna(df[col].median() if training else 0)  # fill zeros in eval
+
+    scaler = StandardScaler()
+    if training:
+        df[numeric_features] = scaler.fit_transform(df[numeric_features])
+    else:
+        df[numeric_features] = scaler.transform(df[numeric_features])
+
+    feature_cols = numeric_features + categorical_features
+
+    # Group into races
+    races = [
+        race_df.reset_index(drop=True)
+        for _, race_df in df.groupby(["track","raceDate","raceNumber"])
+        if len(race_df) >= min_horses
+    ]
+
+    if not races:
+        raise ValueError("No valid races found")
+
+    if training:
+        # Shuffle & split
+        g = torch.Generator().manual_seed(seed)
+        indices = torch.randperm(len(races), generator=g).tolist()
+        split_idx = int(len(races) * train_frac)
+        train_races = [races[i] for i in indices[:split_idx]]
+        val_races = [races[i] for i in indices[split_idx:]]
+        return train_races, val_races, feature_cols, scaler, encoders, numeric_features
+    else:
+        return races, feature_cols, scaler, encoders, numeric_features
+
+# =========================================================
+# LOSS
+# =========================================================
+
+def top3_listwise_loss(scores, top3_mask):
+    log_probs = torch.log_softmax(scores, dim=0)
+    mask_sum = top3_mask.sum()
+    if mask_sum == 0:
+        return torch.zeros((), device=scores.device)
+    return -(top3_mask * log_probs).sum() / mask_sum
+
+# =========================================================
 # MODEL
-# ===============================
+# =========================================================
+
 class RankingMLP(nn.Module):
-    def __init__(self, input_dim, hidden_dim=128):
+    def __init__(self, input_dim, hidden_dim):
         super().__init__()
         self.net = nn.Sequential(
             nn.Linear(input_dim, hidden_dim),
@@ -74,142 +149,189 @@ class RankingMLP(nn.Module):
     def forward(self, x):
         return self.net(x).squeeze(-1)
 
-# ===============================
-# FETCHERS
-# ===============================
-def fetch_json(url):
-    r = requests.get(url, headers=HEADERS)
-    r.raise_for_status()
-    return r.json() if r.status_code == 200 else {}
+# =========================================================
+# DATASET
+# =========================================================
 
-def fetch_lifetime_stats(bris_id):
-    url = f"https://www.twinspires.com/api/bdsio/bds/getHorseStats?brisId={bris_id}"
-    data = fetch_json(url)
-    return data.get("lifetimeStats") or {}
+class HorseRaceRankingDataset(Dataset):
+    def __init__(self, races, feature_cols):
+        self.races = races
+        self.feature_cols = feature_cols
 
-# ===============================
-# BUILD DATAFRAME
-# ===============================
-def build_dataframe(entries_url, race_url):
-    entries = fetch_json(entries_url)
-    race = fetch_json(race_url)
+    def __len__(self):
+        return len(self.races)
 
-    if not entries or not race:
-        return pd.DataFrame()  # return empty if no data
+    def __getitem__(self, idx):
+        race_df = self.races[idx]
+        X = race_df[self.feature_cols].values
+        X = torch.tensor(X, dtype=torch.float32)
+        y = torch.tensor(race_df["top3"].values, dtype=torch.float32)
+        return X, y
 
-    distance = to_furlongs(race.get("distance"))
-    surface_label = race.get("surfaceLabel")
-    track_condition = race.get("surfaceCondition")
-    current_year = datetime.now().year
+# =========================================================
+# EVALUATION
+# =========================================================
 
-    rows = []
-    for entry in entries:
-        if entry.get("scratched", True):
-            continue  # skip scratched horses
-        ltStats = fetch_lifetime_stats(entry.get("entryId"))
-        row = {
-            "programNumber": entry.get("programNumber"),
-            "name": entry.get("name"),
-            "distance": distance,
-            "age": current_year - int(entry.get("yob")),
-            "weight": entry.get("weight"),
-            "speedPoints": entry.get("speedPoints"),
-            "averagePaceE1": entry.get("averagePaceE1"),
-            "averagePaceE2": entry.get("averagePaceE2"),
-            "averagePaceLP": entry.get("averagePaceLP"),
-            "averageSpeedLast3": entry.get("averageSpeedLast3"),
-            "bestSpeedAtDistance": entry.get("bestSpeedAtDistance"),
-            "averageClass": entry.get("averageClass"),
-            "lastClass": entry.get("lastClass"),
-            "primePower": entry.get("primePower"),
-            "odds": parse_fractional_odds(entry.get("oddsTrend", {}).get("current", {}).get("oddsText")),
-            "horseLtTrackStartCount": ltStats.get("horseLtTrackStartCount", 0),
-            "horseLtTrackWinCount": ltStats.get("horseLtTrackWinCount", 0),
-            "horseLtTrackPlacesCount": ltStats.get("horseLtTrackPlacesCount", 0),
-            "horseLtTrackShowsCount": ltStats.get("horseLtTrackShowsCount", 0),
-            "horseLtTrackQHStartCount": ltStats.get("horseLtTrackQHStartCount", 0),
-            "horseLtTrackQHWinCount": ltStats.get("horseLtTrackQHWinCount", 0),
-            "horseLtTrackQHPlacesCount": ltStats.get("horseLtTrackQHPlacesCount", 0),
-            "horseLtTrackQHShowsCount": ltStats.get("horseLtTrackQHShowsCount", 0),
-            "horseLtMudsloppyStartCount": ltStats.get("horseLtMudsloppyStartCount", 0),
-            "horseLtMudsloppyWinCount": ltStats.get("horseLtMudsloppyWinCount", 0),
-            "horseLtMudsloppyPlacesCount": ltStats.get("horseLtMudsloppyPlacesCount", 0),
-            "horseLtMudsloppyShowsCount": ltStats.get("horseLtMudsloppyShowsCount", 0),
-            "surfaceLabel": surface_label,
-            "trackConditionLabel": track_condition,
-            "equipment": entry.get("equipment", "NA"),
-            "priorRunningStyle": entry.get("priorRunningStyle") or "NA"
-        }
-        rows.append(row)
+def eval_race(track, race_num, race_date):
+    # -----------------------------
+    # Load trained scaler, encoders, and feature_cols
+    # -----------------------------
+    scaler = pickle.load(open(SCALER_PATH,"rb"))
+    encoders = pickle.load(open(ENCODERS_PATH,"rb"))
+    feature_cols = pickle.load(open(FEATURE_COLS_PATH,"rb"))
 
-    df = pd.DataFrame(rows)
-    return df
+    # -----------------------------
+    # Load race data
+    # -----------------------------
+    conn = sqlite3.connect(DB_PATH)
+    df = pd.read_sql(f"SELECT * FROM {TABLE_NAME}", conn)
+    conn.close()
 
-# ===============================
-# PREPROCESS
-# ===============================
-def preprocess_for_model(df, feature_cols, scaler, encoders):
-    df = df.copy()
+    # Convert types for safe filtering
+    df["track"] = df["track"].str.lower()
+    df["raceNumber"] = df["raceNumber"].astype(int)
+    df["raceDate"] = pd.to_datetime(df["raceDate"]).dt.date
+    race_date_dt = datetime.strptime(race_date, "%Y-%m-%d").date()
 
-    # --- encode categoricals ---
-    for col, encoder in encoders.items():
-        if col not in df:
-            df[col] = "NA"
+    # Filter for the requested race
+    df = df[(df["track"] == track.lower()) &
+            (df["raceNumber"] == race_num) &
+            (df["raceDate"] == race_date_dt)]
+
+    if df.empty:
+        raise ValueError(f"No race found for {track} race {race_num} on {race_date}")
+
+    # -----------------------------
+    # Preprocess numeric features
+    # -----------------------------
+    numeric_features = [col for col in feature_cols if col not in encoders]
+
+    for col in numeric_features:
+        df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0)
+
+    df[numeric_features] = scaler.transform(df[numeric_features])
+
+    # -----------------------------
+    # Preprocess categorical features
+    # -----------------------------
+    for col in encoders:
         df[col] = df[col].fillna("NA")
-        df[col] = encoder.transform(df[col])
+        df[col] = encoders[col].transform(df[col])
 
-    # --- ensure scaler columns exist ---
-    for col in scaler.feature_names_in_:
-        if col not in df:
-            df[col] = 0
-        df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
-
-    # --- scale features ---
-    df.loc[:, scaler.feature_names_in_] = scaler.transform(df[scaler.feature_names_in_])
-
-    # --- select final features ---
-    df = df[feature_cols]
-
-    # --- convert to numeric tensor ---
-    X = torch.tensor(df.apply(pd.to_numeric, errors='coerce').fillna(0).values, dtype=torch.float32)
-    return X, df
-
-# ===============================
-# PREDICT
-# ===============================
-def predict_top3(entries_url, race_url):
-    # load artifacts
-    with open(SCALER_PATH, "rb") as f:
-        scaler = pickle.load(f)
-    with open(ENCODERS_PATH, "rb") as f:
-        encoders = pickle.load(f)
-    with open(FEATURE_COLS_PATH, "rb") as f:
-        feature_cols = pickle.load(f)
-
-    model = RankingMLP(len(feature_cols))
+    # -----------------------------
+    # Load model and predict
+    # -----------------------------
+    model = RankingMLP(len(feature_cols), HIDDEN_DIM).to(DEVICE)
     model.load_state_dict(torch.load(MODEL_PATH, map_location=DEVICE))
     model.eval()
 
-    df = build_dataframe(entries_url, race_url)
-    if df.empty:
-        return pd.DataFrame(columns=["programNumber", "name"])
-
-    # keep identifiers
-    df_identifiers = df[["programNumber", "name"]].copy()
-
-    X, _ = preprocess_for_model(df, feature_cols, scaler, encoders)
-
+    X = torch.tensor(df[feature_cols].values, dtype=torch.float32).to(DEVICE)
     with torch.no_grad():
-        scores = model(X)
-        top3_idx = torch.argsort(scores, descending=True)[:3]
+        df["score"] = model(X).cpu().numpy()
 
-    return df_identifiers.iloc[top3_idx]
+    # -----------------------------
+    # Sort by predicted score
+    # -----------------------------
+    df = df.sort_values("score", ascending=False)
 
-# ===============================
-# RUN
-# ===============================
+    print(f"\n🏇 {track.upper()} RACE {race_num} on {race_date}")
+    print(df[["name","score"]].to_string(index=False))
+
+    top_pick = df.iloc[0]
+    print("\nTOP PICK:", top_pick["name"])
+
+# =========================================================
+# TRAINING
+# =========================================================
+
+def train():
+    train_races, val_races, feature_cols, scaler, encoders, numeric_features = load_and_split_races(
+        DB_PATH, TABLE_NAME, MIN_HORSES_PER_RACE, INCLUDE_ODDS, TRAIN_FRAC, SEED, training=True
+    )
+
+    train_dataset = HorseRaceRankingDataset(train_races, feature_cols)
+    val_dataset = HorseRaceRankingDataset(val_races, feature_cols)
+    train_loader = DataLoader(train_dataset, batch_size=1, shuffle=True)
+
+    model = RankingMLP(input_dim=len(feature_cols), hidden_dim=HIDDEN_DIM).to(DEVICE)
+    optimizer = torch.optim.Adam(model.parameters(), lr=LR)
+
+    print(f"Train races: {len(train_dataset)}, Validation races: {len(val_dataset)}, Device: {DEVICE}")
+
+    epoch_losses = []
+    for epoch in range(EPOCHS):
+        model.train()
+        total_loss = 0.0
+
+        for X, y in train_loader:
+            X = X.squeeze(0).to(DEVICE)
+            y = y.squeeze(0).to(DEVICE)
+
+            scores = model(X)
+            loss = top3_listwise_loss(scores, y)
+
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+
+            total_loss += loss.item()
+
+        avg_loss = total_loss / len(train_loader)
+        epoch_losses.append(avg_loss)
+        # Validation
+        model.eval()
+        hits = 0
+        with torch.no_grad():
+            for i in range(len(val_dataset)):
+                X, y = val_dataset[i]
+                scores = model(X.to(DEVICE))
+                best_idx = torch.argmax(scores).item()
+                if y[best_idx].item() == 1:
+                    hits += 1
+        val_acc = hits / len(val_dataset)
+        print(f"Epoch {epoch+1}/{EPOCHS} | Train Loss: {avg_loss:.4f} | Val Top-3 Acc: {val_acc*100:.2f}%")
+
+    # Validation
+    model.eval()
+    hits = 0
+    with torch.no_grad():
+        for i in range(len(val_dataset)):
+            X, y = val_dataset[i]
+            scores = model(X.to(DEVICE))
+            best_idx = torch.argmax(scores).item()
+            if y[best_idx].item() == 1:
+                hits += 1
+
+    acc = hits / len(val_dataset)
+    print(f"\nVALIDATION Top-3 accuracy: {acc*100:.2f}%")
+
+    # Save model and preprocessors
+    os.makedirs("./data", exist_ok=True)
+    torch.save(model.state_dict(), MODEL_PATH)
+    with open(SCALER_PATH,"wb") as f:
+        pickle.dump(scaler, f)
+    with open(ENCODERS_PATH,"wb") as f:
+        pickle.dump(encoders, f)
+    with open(FEATURE_COLS_PATH,"wb") as f:
+        pickle.dump(feature_cols, f)
+
+    print("\nSaved model, scaler, encoders, and feature_cols.")
+
+# =========================================================
+# MAIN
+# =========================================================
+
 if __name__ == "__main__":
-    entries_url = "https://www.twinspires.com/adw/todays-tracks/mvr/Thoroughbred/races/2/entries?affid=2800"
-    race_url = "https://www.twinspires.com/adw/todays-tracks/mvr/Thoroughbred/races/2?affid=2800"
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-t", "--train", action="store_true", help="Train the model")
+    parser.add_argument("-e", "--eval", nargs=3, metavar=("TRACK","RACE","DATE"), help="Evaluate a single race")
+    args = parser.parse_args()
 
-    print(predict_top3(entries_url, race_url))
+    if args.train:
+        train()
+    elif args.eval:
+        track, race, date = args.eval
+        eval_race(track, int(race), date)
+    else:
+        print("Please pass -t to train or -e TRACK RACE DATE to evaluate")

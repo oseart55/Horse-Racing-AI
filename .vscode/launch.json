@@ -1,0 +1,29 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Train Model (-t)",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/eval.py",
+            "console": "integratedTerminal",
+            "args": ["-t"]
+        },
+        {
+            "name": "Eval AQU Race 6",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/eval.py",
+            "console": "integratedTerminal",
+            "args": ["-e", "aqu", "6"]
+        },
+        {
+            "name": "Prompt for args",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/eval.py",
+            "console": "integratedTerminal",
+            "args": "${command:pickArgs}"
+        }
+    ]
+}
