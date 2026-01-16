@@ -7,7 +7,6 @@ from torch.utils.data import Dataset, DataLoader
 from sklearn.preprocessing import StandardScaler, LabelEncoder
 import pickle
 from datetime import datetime
-
 # =========================================================
 # CONFIG
 # =========================================================
@@ -216,14 +215,20 @@ def eval_race(track, race_num, race_date):
 # MAIN
 # =========================================================
 
-if __name__ == "__main__":
+def main(argv=None):
     import argparse
+
     p = argparse.ArgumentParser()
-    p.add_argument("-t", action="store_true")
-    p.add_argument("-e", nargs=3)
-    args = p.parse_args()
+    group = p.add_mutually_exclusive_group(required=True)
+    group.add_argument("-t", action="store_true")
+    group.add_argument("-e", nargs=3)
+
+    args = p.parse_args(argv)
 
     if args.t:
         train()
-    elif args.e:
+    else:
         eval_race(args.e[0], int(args.e[1]), args.e[2])
+
+if __name__ == "__main__":
+    main()

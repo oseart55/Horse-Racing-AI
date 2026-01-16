@@ -7,7 +7,8 @@ from rich.table import Table
 from rich.live import Live
 from rich.panel import Panel
 from plyer import notification  # pip install plyer
-
+from single_race_updater import updateTableForRace
+import evaluator
 # =========================
 # CONFIG
 # =========================
@@ -51,7 +52,7 @@ def get_usa_thoroughbred_tracks(data):
 # =========================
 # ALERT CHECK
 # =========================
-def check_for_alert(track_name, race_number, post_time):
+def check_for_alert(track_name, track_code, race_number, post_time):
     now = datetime.now(timezone.utc)
     delta = post_time - now
     seconds_until = delta.total_seconds()
@@ -64,6 +65,13 @@ def check_for_alert(track_name, race_number, post_time):
             message=f"Race {race_number} starts in {int(seconds_until // 60)}m {int(seconds_until % 60)}s",
             timeout=10
         )
+        updateTableForRace(track_code, race_number)
+        evaluator.main([
+            "-e",
+            str(track_code),
+            str(race_number),
+            date.today().strftime("%Y-%m-%d")
+        ])
 
 # =========================
 # BUILD LIVE TABLE
@@ -97,7 +105,7 @@ def build_table(tracks):
 
         if future_races:
             next_race, post_time = min(future_races, key=lambda x: x[1])
-            check_for_alert(track.get("name"), next_race.get("raceNumber"), post_time)
+            check_for_alert(track.get("name"), track.get("brisCode") , next_race.get("raceNumber"), post_time)
 
             delta = post_time - now
             total_seconds = int(delta.total_seconds())

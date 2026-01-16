@@ -184,7 +184,4 @@ def updateTableForRace(trackCode: str, raceNumber: int):
             """
             cur.executemany(UPSERT_SQL, horses)
             conn.commit()
-    
-
-updateTableForRace("tp", 1)
-conn.close()
+    conn.close()
