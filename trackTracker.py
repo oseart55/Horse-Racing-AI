@@ -1,6 +1,7 @@
 import os
 import time
 import requests
+import traceback
 from datetime import datetime, timezone, date
 from rich.console import Console
 from rich.table import Table
@@ -36,6 +37,26 @@ def fetch_tracks():
         return []
 
 # =========================
+# LOGGING
+# =========================
+def log_exception(exc, context="", logfile="errors.log"):
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    entry = (
+        f"\n[{timestamp}] EXCEPTION\n"
+        f"Context: {context}\n"
+        f"Type: {type(exc).__name__}\n"
+        f"Message: {exc}\n"
+        f"Traceback:\n{traceback.format_exc()}\n"
+        f"{'-'*60}\n"
+    )
+
+    os.makedirs(os.path.dirname(logfile), exist_ok=True) if os.path.dirname(logfile) else None
+
+    with open(logfile, "a", encoding="utf-8") as f:
+        f.write(entry)
+
+# =========================
 # FILTER TRACKS
 # =========================
 def get_usa_thoroughbred_tracks(data):
@@ -47,6 +68,8 @@ def get_usa_thoroughbred_tracks(data):
         and "eq" not in track.get("brisCode", "").lower()
         and "Pick 5" not in track.get("name", "")
         and "Pick 6" not in track.get("name", "")
+        and "Cross Country P5" not in track.get("name", "")
+        and "Tampa Bay Downs" not in track.get("name", "")
     ]
 
 # =========================
@@ -60,18 +83,24 @@ def check_for_alert(track_name, track_code, race_number, post_time):
     race_id = f"{track_name}|{race_number}|{post_time.isoformat()}"
     if 0 < seconds_until <= 5 * 60 and race_id not in alerted_races:
         alerted_races.add(race_id)
-        notification.notify(
-            title=f"Upcoming Race: {track_name}",
-            message=f"Race {race_number} starts in {int(seconds_until // 60)}m {int(seconds_until % 60)}s",
-            timeout=10
-        )
-        updateTableForRace(track_code, race_number)
-        evaluator.main([
-            "-e",
-            str(track_code),
-            str(race_number),
-            date.today().strftime("%Y-%m-%d")
-        ])
+        # notification.notify(
+        #     title=f"Upcoming Race: {track_name}",
+        #     message=f"Race {race_number} starts in {int(seconds_until // 60)}m {int(seconds_until % 60)}s",
+        #     timeout=10
+        # )
+        try:
+            updateTableForRace(track_code, race_number)
+        except Exception as e:
+            log_exception(e, f"Error Updating {track_code} Race: {race_number}")
+        try:
+            evaluator.main([
+                "-e",
+                str(track_code),
+                str(race_number),
+                date.today().strftime("%Y-%m-%d")
+            ])
+        except Exception as e:
+            log_exception(e, f"Error Evaluating {track_code} Race: {race_number}")
 
 # =========================
 # BUILD LIVE TABLE

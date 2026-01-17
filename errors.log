@@ -1,0 +1,206 @@
+
+[2026-01-16 12:48:53] EXCEPTION
+Context: Error Evaluating gp Race: 8
+Type: ValueError
+Message: y contains previously unseen labels: 'Off'
+Traceback:
+Traceback (most recent call last):
+  File "c:\Users\mpetagara\AppData\Local\Python\pythoncore-3.10-64\lib\site-packages\sklearn\utils\_encode.py", line 235, in _encode
+    return _map_to_integer(values, uniques)
+  File "c:\Users\mpetagara\AppData\Local\Python\pythoncore-3.10-64\lib\site-packages\sklearn\utils\_encode.py", line 174, in _map_to_integer
+    return xp.asarray([table[v] for v in values], device=device(values))
+  File "c:\Users\mpetagara\AppData\Local\Python\pythoncore-3.10-64\lib\site-packages\sklearn\utils\_encode.py", line 174, in <listcomp>
+    return xp.asarray([table[v] for v in values], device=device(values))
+  File "c:\Users\mpetagara\AppData\Local\Python\pythoncore-3.10-64\lib\site-packages\sklearn\utils\_encode.py", line 167, in __missing__
+    raise KeyError(key)
+KeyError: 'Off'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "U:\private_mpetagara\Github\Horse-Racing-AI\trackTracker.py", line 96, in check_for_alert
+    evaluator.main([
+  File "U:\private_mpetagara\Github\Horse-Racing-AI\evaluator.py", line 239, in main
+    eval_race(args.e[0], int(args.e[1]), args.e[2])
+  File "U:\private_mpetagara\Github\Horse-Racing-AI\evaluator.py", line 204, in eval_race
+    df[col] = le.transform(df[col].fillna("NA"))
+  File "c:\Users\mpetagara\AppData\Local\Python\pythoncore-3.10-64\lib\site-packages\sklearn\preprocessing\_label.py", line 134, in transform
+    return _encode(y, uniques=self.classes_)
+  File "c:\Users\mpetagara\AppData\Local\Python\pythoncore-3.10-64\lib\site-packages\sklearn\utils\_encode.py", line 237, in _encode
+    raise ValueError(f"y contains previously unseen labels: {e}")
+ValueError: y contains previously unseen labels: 'Off'
+
+------------------------------------------------------------
+
+[2026-01-16 12:57:02] EXCEPTION
+Context: Error Evaluating sa Race: 2
+Type: PermissionError
+Message: [Errno 13] Permission denied: 'predictions.xlsx'
+Traceback:
+Traceback (most recent call last):
+  File "U:\private_mpetagara\Github\Horse-Racing-AI\trackTracker.py", line 96, in check_for_alert
+    evaluator.main([
+  File "U:\private_mpetagara\Github\Horse-Racing-AI\evaluator.py", line 239, in main
+    eval_race(args.e[0], int(args.e[1]), args.e[2])
+  File "U:\private_mpetagara\Github\Horse-Racing-AI\evaluator.py", line 215, in eval_race
+    append_prediction(
+  File "U:\private_mpetagara\Github\Horse-Racing-AI\excelWriter.py", line 58, in append_prediction
+  File "c:\Users\mpetagara\AppData\Local\Python\pythoncore-3.10-64\lib\site-packages\pandas\io\excel\_openpyxl.py", line 61, in __init__
+    super().__init__(
+  File "c:\Users\mpetagara\AppData\Local\Python\pythoncore-3.10-64\lib\site-packages\pandas\io\excel\_base.py", line 1246, in __init__
+    self._handles = get_handle(
+  File "c:\Users\mpetagara\AppData\Local\Python\pythoncore-3.10-64\lib\site-packages\pandas\io\common.py", line 882, in get_handle
+    handle = open(handle, ioargs.mode)
+PermissionError: [Errno 13] Permission denied: 'predictions.xlsx'
+
+------------------------------------------------------------
+
+[2026-01-16 12:57:26] EXCEPTION
+Context: Error fetching or parsing race sa 2
+Type: AttributeError
+Message: 'NoneType' object has no attribute 'get'
+Traceback:
+Traceback (most recent call last):
+  File "U:\private_mpetagara\Github\Horse-Racing-AI\excelWriter.py", line 78, in append_prediction
+    race_details = raceResults.get("raceDetails") or {}
+AttributeError: 'NoneType' object has no attribute 'get'
+
+------------------------------------------------------------
+
+[2026-01-16 12:57:26] EXCEPTION
+Context: Error Evaluating sa Race: 2
+Type: PermissionError
+Message: [Errno 13] Permission denied: 'predictions.xlsx'
+Traceback:
+Traceback (most recent call last):
+  File "U:\private_mpetagara\Github\Horse-Racing-AI\trackTracker.py", line 96, in check_for_alert
+    evaluator.main([
+  File "U:\private_mpetagara\Github\Horse-Racing-AI\evaluator.py", line 239, in main
+    eval_race(args.e[0], int(args.e[1]), args.e[2])
+  File "U:\private_mpetagara\Github\Horse-Racing-AI\evaluator.py", line 215, in eval_race
+    append_prediction(
+  File "U:\private_mpetagara\Github\Horse-Racing-AI\excelWriter.py", line 105, in append_prediction
+    with pd.ExcelWriter(file_path, engine="openpyxl", mode="a", if_sheet_exists="overlay") as writer:
+  File "c:\Users\mpetagara\AppData\Local\Python\pythoncore-3.10-64\lib\site-packages\pandas\io\excel\_openpyxl.py", line 61, in __init__
+    super().__init__(
+  File "c:\Users\mpetagara\AppData\Local\Python\pythoncore-3.10-64\lib\site-packages\pandas\io\excel\_base.py", line 1246, in __init__
+    self._handles = get_handle(
+  File "c:\Users\mpetagara\AppData\Local\Python\pythoncore-3.10-64\lib\site-packages\pandas\io\common.py", line 882, in get_handle
+    handle = open(handle, ioargs.mode)
+PermissionError: [Errno 13] Permission denied: 'predictions.xlsx'
+
+------------------------------------------------------------
+
+[2026-01-16 12:57:46] EXCEPTION
+Context: Error fetching or parsing race sa 2
+Type: AttributeError
+Message: 'NoneType' object has no attribute 'get'
+Traceback:
+Traceback (most recent call last):
+  File "U:\private_mpetagara\Github\Horse-Racing-AI\excelWriter.py", line 78, in append_prediction
+    race_details = raceResults.get("raceDetails") or {}
+AttributeError: 'NoneType' object has no attribute 'get'
+
+------------------------------------------------------------
+
+[2026-01-16 13:02:01] EXCEPTION
+Context: Error Evaluating sa Race: 2
+Type: PermissionError
+Message: [Errno 13] Permission denied: 'predictions.xlsx'
+Traceback:
+Traceback (most recent call last):
+  File "U:\private_mpetagara\Github\Horse-Racing-AI\trackTracker.py", line 96, in check_for_alert
+    evaluator.main([
+  File "U:\private_mpetagara\Github\Horse-Racing-AI\evaluator.py", line 239, in main
+    eval_race(args.e[0], int(args.e[1]), args.e[2])
+  File "U:\private_mpetagara\Github\Horse-Racing-AI\evaluator.py", line 215, in eval_race
+    append_prediction(
+  File "U:\private_mpetagara\Github\Horse-Racing-AI\excelWriter.py", line 71, in append_prediction
+    with pd.ExcelWriter(file_path, engine="openpyxl", mode="a", if_sheet_exists="overlay") as writer:
+  File "c:\Users\mpetagara\AppData\Local\Python\pythoncore-3.10-64\lib\site-packages\pandas\io\excel\_openpyxl.py", line 61, in __init__
+    super().__init__(
+  File "c:\Users\mpetagara\AppData\Local\Python\pythoncore-3.10-64\lib\site-packages\pandas\io\excel\_base.py", line 1246, in __init__
+    self._handles = get_handle(
+  File "c:\Users\mpetagara\AppData\Local\Python\pythoncore-3.10-64\lib\site-packages\pandas\io\common.py", line 882, in get_handle
+    handle = open(handle, ioargs.mode)
+PermissionError: [Errno 13] Permission denied: 'predictions.xlsx'
+
+------------------------------------------------------------
+
+[2026-01-16 15:53:59] EXCEPTION
+Context: Error Evaluating tp Race: 3
+Type: ValueError
+Message: y contains previously unseen labels: 'NA'
+Traceback:
+Traceback (most recent call last):
+  File "c:\Users\mpetagara\AppData\Local\Python\pythoncore-3.10-64\lib\site-packages\sklearn\utils\_encode.py", line 235, in _encode
+    return _map_to_integer(values, uniques)
+  File "c:\Users\mpetagara\AppData\Local\Python\pythoncore-3.10-64\lib\site-packages\sklearn\utils\_encode.py", line 174, in _map_to_integer
+    return xp.asarray([table[v] for v in values], device=device(values))
+  File "c:\Users\mpetagara\AppData\Local\Python\pythoncore-3.10-64\lib\site-packages\sklearn\utils\_encode.py", line 174, in <listcomp>
+    return xp.asarray([table[v] for v in values], device=device(values))
+  File "c:\Users\mpetagara\AppData\Local\Python\pythoncore-3.10-64\lib\site-packages\sklearn\utils\_encode.py", line 167, in __missing__
+    raise KeyError(key)
+KeyError: 'NA'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "U:\private_mpetagara\Github\Horse-Racing-AI\trackTracker.py", line 96, in check_for_alert
+    evaluator.main([
+  File "U:\private_mpetagara\Github\Horse-Racing-AI\evaluator.py", line 234, in main
+    eval_race(args.e[0], int(args.e[1]), args.e[2])
+  File "U:\private_mpetagara\Github\Horse-Racing-AI\evaluator.py", line 204, in eval_race
+    df[col] = le.transform(df[col].fillna("NA"))
+  File "c:\Users\mpetagara\AppData\Local\Python\pythoncore-3.10-64\lib\site-packages\sklearn\preprocessing\_label.py", line 134, in transform
+    return _encode(y, uniques=self.classes_)
+  File "c:\Users\mpetagara\AppData\Local\Python\pythoncore-3.10-64\lib\site-packages\sklearn\utils\_encode.py", line 237, in _encode
+    raise ValueError(f"y contains previously unseen labels: {e}")
+ValueError: y contains previously unseen labels: 'NA'
+
+------------------------------------------------------------
+
+[2026-01-16 15:54:32] EXCEPTION
+Context: Error Evaluating tp Race: 3
+Type: ValueError
+Message: y contains previously unseen labels: 'NA'
+Traceback:
+Traceback (most recent call last):
+  File "c:\Users\mpetagara\AppData\Local\Python\pythoncore-3.10-64\lib\site-packages\sklearn\utils\_encode.py", line 235, in _encode
+    return _map_to_integer(values, uniques)
+  File "c:\Users\mpetagara\AppData\Local\Python\pythoncore-3.10-64\lib\site-packages\sklearn\utils\_encode.py", line 174, in _map_to_integer
+    return xp.asarray([table[v] for v in values], device=device(values))
+  File "c:\Users\mpetagara\AppData\Local\Python\pythoncore-3.10-64\lib\site-packages\sklearn\utils\_encode.py", line 174, in <listcomp>
+    return xp.asarray([table[v] for v in values], device=device(values))
+  File "c:\Users\mpetagara\AppData\Local\Python\pythoncore-3.10-64\lib\site-packages\sklearn\utils\_encode.py", line 167, in __missing__
+    raise KeyError(key)
+KeyError: 'NA'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "U:\private_mpetagara\Github\Horse-Racing-AI\trackTracker.py", line 96, in check_for_alert
+    evaluator.main([
+  File "U:\private_mpetagara\Github\Horse-Racing-AI\evaluator.py", line 234, in main
+    eval_race(args.e[0], int(args.e[1]), args.e[2])
+  File "U:\private_mpetagara\Github\Horse-Racing-AI\evaluator.py", line 204, in eval_race
+    df[col] = le.transform(df[col].fillna("NA"))
+  File "c:\Users\mpetagara\AppData\Local\Python\pythoncore-3.10-64\lib\site-packages\sklearn\preprocessing\_label.py", line 134, in transform
+    return _encode(y, uniques=self.classes_)
+  File "c:\Users\mpetagara\AppData\Local\Python\pythoncore-3.10-64\lib\site-packages\sklearn\utils\_encode.py", line 237, in _encode
+    raise ValueError(f"y contains previously unseen labels: {e}")
+ValueError: y contains previously unseen labels: 'NA'
+
+------------------------------------------------------------
+
+[2026-01-16 00:00:00] EXCEPTION
+Context: Error processing ct race 1
+Type: AttributeError
+Message: 'NoneType' object has no attribute 'get'
+Traceback:
+Traceback (most recent call last):
+  File "U:\private_mpetagara\Github\Horse-Racing-AI\excelWriter.py", line 105, in update_correct_column
+    race_details = raceResults.get("raceDetails") or {}
+AttributeError: 'NoneType' object has no attribute 'get'
+
+------------------------------------------------------------

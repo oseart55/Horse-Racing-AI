@@ -7,8 +7,6 @@ HEADERS = {
                   "AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.2 Mobile/15E148 Safari/604.1"
 }
 DB_FILE = "horses.db"
-conn = sqlite3.connect(DB_FILE)
-cur = conn.cursor()
 
 UPDATE_COLUMNS = [
     "name", "postPosition", "programNumber", "distance", "surfaceLabel", "trackConditionLabel",
@@ -30,10 +28,10 @@ UPDATE_COLUMNS = [
 update_clause = ",\n    ".join(f"{col} = excluded.{col}" for col in UPDATE_COLUMNS)
 
 def get_surface_label(pre_race_data):   
-    return pre_race_data.get("surfaceLabel")
+    return pre_race_data.get("surfaceLabel") if pre_race_data.get("surfaceLabel") != "" else None
 
 def get_track_condition_label(pre_race_data):   
-    return pre_race_data.get("surfaceCondition")
+    return pre_race_data.get("surfaceCondition") if pre_race_data.get("surfaceCondition") != "" else None
 
 def get_json(url):
     try:
@@ -71,6 +69,7 @@ def distance_str_to_units(distance: str) -> float:
     return round(furlongs * 100, 2)
 
 def updateTableForRace(trackCode: str, raceNumber: int):
+
     race_date = get_json(f"https://www.twinspires.com/adw/ami/wager/racedate_string?affid=2000").get("raceDate")
     pre_race_data = get_json(f"https://www.twinspires.com/adw/todays-tracks/{trackCode}/Thoroughbred/races/{raceNumber}?affid=2800")
     surfaceCondition = get_surface_label(pre_race_data)
@@ -84,8 +83,10 @@ def updateTableForRace(trackCode: str, raceNumber: int):
     data = resp.json()
     race_year = int(race_date.split("-")[0])
     horses = []
+    conn = sqlite3.connect(DB_FILE)
+    cur = conn.cursor()
     for h in data:
-        print(h.get("name"))
+        # print(h.get("name"))
         brisId = h.get("entryId")
         stats = get_json(f"https://www.twinspires.com/api/bdsio/bds/getHorseStats?brisId={brisId}")
         lt = stats.get("lifetimeStats") or {}
@@ -143,6 +144,7 @@ def updateTableForRace(trackCode: str, raceNumber: int):
             "raceNumber": raceNumber,
         })
     if horses:
+            
             UPSERT_SQL = f"""
             INSERT INTO horses (
                 brisId, name, postPosition, programNumber, distance, surfaceLabel, trackConditionLabel, odds, oddsRank,

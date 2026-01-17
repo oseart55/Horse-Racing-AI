@@ -7,6 +7,8 @@ from torch.utils.data import Dataset, DataLoader
 from sklearn.preprocessing import StandardScaler, LabelEncoder
 import pickle
 from datetime import datetime
+
+from excelWriter import append_and_update, append_prediction
 # =========================================================
 # CONFIG
 # =========================================================
@@ -209,7 +211,8 @@ def eval_race(track, race_num, race_date):
         df["prob_top3"] = torch.sigmoid(model(X)).cpu().numpy()
 
     df = df.sort_values("prob_top3", ascending=False)
-    print(df[["name","prob_top3"]])
+    print(f"Name: {df['name'].iloc[0]} Probability: {df['prob_top3'].iloc[0]:.2f}")
+    append_and_update(track, race_num, df["name"].iloc[0], f"{df['prob_top3'].iloc[0]:.2f}", race_date=None, file_path="predictions.xlsx")
 
 # =========================================================
 # MAIN
